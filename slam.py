@@ -3,6 +3,7 @@ import os
 import time
 import numpy as np
 
+
 class FrameReader:
     def __init__(self, datasetPath):
         __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
@@ -23,6 +24,15 @@ class FrameReader:
         return self._datasetPath
 
 
+def calcWrongFeatureIndices(features, frame, status):
+    status_ = status.copy()
+    for idx, pt in enumerate(features):
+        if pt[0] < 0 or pt[1] < 0 or pt[0] > frame.shape[1] or pt[1] > frame.shape[0]:
+            status_[idx] = 0
+    wrongIndices = np.where(status_ == 0)[0]
+    return wrongIndices
+    
+
 if __name__ == "__main__":
     frameReader = FrameReader("videos/sequence_11/images/")
 
@@ -41,12 +51,14 @@ if __name__ == "__main__":
 
     # Feature tracking on the 2nd frame
     currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
-    print ("Tracked {} features in the second frame, invalid features: {}".format(len(currPts), np.count_nonzero(status == 0)))
 
-    # Filter out keypoints for which status is zero or coordinates are outside the image
-    # ...
+    # Filter out features that were not tracked (status=0) or are outside the image
+    wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
+    prevPts = np.delete(prevPts, wrongIndices, axis=0)
+    currPts = np.delete(currPts, wrongIndices, axis=0)
+    print(prevPts.shape, currPts.shape)
 
-    # # Find the essential matrix (focal and p.p. were taken from camera.txt file)
+    # Find the essential matrix (focal and p.p. were taken from camera.txt file)
     fx = 0.349153000000000
     fy = 0.436593000000000
     cx = 0.493140000000000
@@ -68,24 +80,40 @@ if __name__ == "__main__":
 
     # Process next frames
     for frameIdx in range(2, frameReader.getFramesCount()):
+        # Read next frame and track features
         currFrame = cv2.cvtColor(frameReader.readFrame(frameIdx), cv2.COLOR_RGB2GRAY)
         currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
-        print("Tracked {} features in frame #{}, valid features: {}".format(len(currPts), frameIdx, np.count_nonzero(status)))
 
-        # invalidIndices = [i for i, elem in enumerate(status) if elem == 0]
-        # print("Invalid indices from tracking in frame #{}: {}".format(frameIdx, invalidIndices))
-        prevPts_new = np.delete(prevPts, status)
-        currPts_new = np.delete(currPts, status)
-        print(currPts.shape)
-        print("Total number of features after tracking in frame #{} = {}".format(frameIdx, len(currPts_new)))
+        # Filter out features that were not tracked (status=0) or are outside the image
+        wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
+        prevPts = np.delete(prevPts, wrongIndices, axis=0)
+        currPts = np.delete(currPts, wrongIndices, axis=0)
+        print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
 
-        # frameKeypts = cv2.drawKeypoints(currFrame, cv2.KeyPoint_convert(currPts), None, color=(255,0,0))
-        # cv2.imshow("Frame with keypoints", currFrame)
+        # Retrack if too many features were filtered out (less than 50 points left)
+        if len(currPts) < 50:
+            prevPts = cv2.KeyPoint_convert(fast.detect(currFrame))
+            currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
+            
+            wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
+            prevPts = np.delete(prevPts, wrongIndices, axis=0)
+            currPts = np.delete(currPts, wrongIndices, axis=0)
+            print("Too few features in frame #{}, {} features detected after retracking".format(frameIdx, len(currPts)))
 
-        # if cv2.waitKey(1) == ord('q'):
-            # break
+        # Display current frame with motion vectors and some information (frame id, # of features)
+        currFrameRGB = cv2.cvtColor(currFrame, cv2.COLOR_GRAY2RGB)
+        for i in range(len(currPts)-1):
+            cv2.circle(currFrameRGB, tuple(currPts[i]), radius=3, color=(255, 0, 0))
+            cv2.line(currFrameRGB, tuple(prevPts[i]), tuple(currPts[i]), color=(255, 0, 0))
+        cv2.putText(currFrameRGB, "Frame: {}".format(frameIdx), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
+        cv2.putText(currFrameRGB, "Features: {}".format(len(currPts)), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
+        cv2.imshow("Frame with keypoints", currFrameRGB)
 
+        if cv2.waitKey(1) == ord('q'):
+            break
+
+        # Swap frames before next iteration
         prevFrame = currFrame
         prevPts = currPts
 
-    # cv2.destroyAllWindows()
+    cv2.destroyAllWindows()
