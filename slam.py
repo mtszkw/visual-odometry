@@ -56,7 +56,6 @@ if __name__ == "__main__":
     wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
     prevPts = np.delete(prevPts, wrongIndices, axis=0)
     currPts = np.delete(currPts, wrongIndices, axis=0)
-    print(prevPts.shape, currPts.shape)
 
     # Find the essential matrix (focal and p.p. were taken from camera.txt file)
     fx = 0.349153000000000
@@ -88,7 +87,8 @@ if __name__ == "__main__":
         wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
         prevPts = np.delete(prevPts, wrongIndices, axis=0)
         currPts = np.delete(currPts, wrongIndices, axis=0)
-        print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
+        if frameIdx % 10 == 0:
+            print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
 
         # Retrack if too many features were filtered out (less than 50 points left)
         if len(currPts) < 50:
