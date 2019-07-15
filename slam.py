@@ -15,7 +15,9 @@ class FrameReader:
         if index >= self._numFrames:
             raise Exception("Cannot read frame number {} from {}".format(index, self._datasetPath))
 
-        return cv2.imread(os.path.join(self._datasetPath, "{:05d}.jpg".format(index)))
+        img = cv2.imread(os.path.join(self._datasetPath, "{:05d}.jpg".format(index)))
+        img = cv2.resize(img, (int(img.shape[1] * 3 / 4), int(img.shape[0] * 3 / 4)))
+        return img
 
     def getFramesCount(self):
         return self._numFrames
@@ -87,8 +89,8 @@ if __name__ == "__main__":
         wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
         prevPts = np.delete(prevPts, wrongIndices, axis=0)
         currPts = np.delete(currPts, wrongIndices, axis=0)
-        if frameIdx % 10 == 0:
-            print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
+        # if frameIdx % 10 == 0:
+            # print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
 
         # Retrack if too many features were filtered out (less than 50 points left)
         if len(currPts) < 50:
@@ -98,13 +100,13 @@ if __name__ == "__main__":
             wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
             prevPts = np.delete(prevPts, wrongIndices, axis=0)
             currPts = np.delete(currPts, wrongIndices, axis=0)
-            print("Too few features in frame #{}, {} features detected after retracking".format(frameIdx, len(currPts)))
+            # print("Too few features in frame #{}, {} features detected after retracking".format(frameIdx, len(currPts)))
 
         # Display current frame with motion vectors and some information (frame id, # of features)
         currFrameRGB = cv2.cvtColor(currFrame, cv2.COLOR_GRAY2RGB)
         for i in range(len(currPts)-1):
-            cv2.circle(currFrameRGB, tuple(currPts[i]), radius=3, color=(255, 0, 0))
-            cv2.line(currFrameRGB, tuple(prevPts[i]), tuple(currPts[i]), color=(255, 0, 0))
+            cv2.circle(currFrameRGB, tuple(currPts[i]), radius=3, color=(200, 100, 0))
+            cv2.line(currFrameRGB, tuple(prevPts[i]), tuple(currPts[i]), color=(200, 100, 0))
         cv2.putText(currFrameRGB, "Frame: {}".format(frameIdx), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
         cv2.putText(currFrameRGB, "Features: {}".format(len(currPts)), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
         cv2.imshow("Frame with keypoints", currFrameRGB)
