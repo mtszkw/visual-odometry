@@ -1,31 +1,13 @@
 import cv2
-import os
-import time
 import numpy as np
 
+from FrameReader import FrameReader
 
-class FrameReader:
-    def __init__(self, datasetPath):
-        __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
-        self._datasetPath = os.path.join(__location__, datasetPath)
-        self._numFrames = len([x for x in os.listdir(datasetPath) if x.endswith('.jpg')])
-        print("Found {} images in {}".format(self._numFrames, self._datasetPath))
-
-    def readFrame(self, index=0):
-        if index >= self._numFrames:
-            raise Exception("Cannot read frame number {} from {}".format(index, self._datasetPath))
-
-        img = cv2.imread(os.path.join(self._datasetPath, "{:05d}.jpg".format(index)))
-        img = cv2.resize(img, (int(img.shape[1] * 3 / 4), int(img.shape[0] * 3 / 4)))
-        return img
-
-    def getFramesCount(self):
-        return self._numFrames
-
-    def getDatasetPath(self):
-        return self._datasetPath
-
-
+# Finds indices of bad features (with status=0 or position outside the frame).
+# @param features Detected (or tracked) features.
+# @param frame Image matrix.
+# @param status Vector of status flags returned by optical flow.
+# @returns Vector containing indices that should be filtered out.
 def calcWrongFeatureIndices(features, frame, status):
     status_ = status.copy()
     for idx, pt in enumerate(features):
@@ -33,24 +15,13 @@ def calcWrongFeatureIndices(features, frame, status):
             status_[idx] = 0
     wrongIndices = np.where(status_ == 0)[0]
     return wrongIndices
-    
 
-if __name__ == "__main__":
-    frameReader = FrameReader("videos/sequence_11/images/")
-
-    # If there are less than two frames in directory, throw an exception and quit.
-    if frameReader.getFramesCount() < 2:
-        raise Exception("Not enough images ({}) found, aborting.".format(frameReader.getFramesCount()))
-
-    # Read first two frames
-    prevFrame = cv2.cvtColor(frameReader.readFrame(0), cv2.COLOR_RGB2GRAY)
-    currFrame = cv2.cvtColor(frameReader.readFrame(1), cv2.COLOR_RGB2GRAY)
-
-    # Feature detection on the 1st frame
-    fast = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
-    prevPts = cv2.KeyPoint_convert(fast.detect(prevFrame))
-    print("Detected {} features in the first frame".format(len(prevPts)))
-
+# Tracks features using Lucas-Kanade optical flow and filters out bad features.
+# @param prevFrame Previous image.
+# @param currFrame Current (next) image.
+# @param prevPts Features detected on previous frame.
+# @returns Features from previous and current frame (tracked), both filtered.
+def trackFeatures(prevFrame, currFrame, prevPts):
     # Feature tracking on the 2nd frame
     currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
 
@@ -58,59 +29,83 @@ if __name__ == "__main__":
     wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
     prevPts = np.delete(prevPts, wrongIndices, axis=0)
     currPts = np.delete(currPts, wrongIndices, axis=0)
+    return prevPts, currPts
 
-    # Find the essential matrix (focal and p.p. were taken from camera.txt file)
+
+# Calculates camera matrix given focal and principal point information.
+def calculateCameraMatrix():
     fx = 0.349153000000000
     fy = 0.436593000000000
     cx = 0.493140000000000
     cy = 0.499021000000000
+    
     focal = (fx + fy) / 2
     pp = (cx, cy)
     K = np.array([ [fx, 0, cx], [0, fy, cy], [0, 0, 1] ])
+    return K, focal, pp
+
+
+def drawFrameFeatures(frame, prevPts, currPts):
+    currFrameRGB = cv2.cvtColor(currFrame, cv2.COLOR_GRAY2RGB)
+    for i in range(len(currPts)-1):
+        cv2.circle(currFrameRGB, tuple(currPts[i]), radius=3, color=(200, 100, 0))
+        cv2.line(currFrameRGB, tuple(prevPts[i]), tuple(currPts[i]), color=(200, 100, 0))
+        cv2.putText(currFrameRGB, "Frame: {}".format(frameIdx), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
+        cv2.putText(currFrameRGB, "Features: {}".format(len(currPts)), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))    
+    cv2.imshow("Frame with keypoints", currFrameRGB)
+    
+
+if __name__ == "__main__":
+    frameReader = FrameReader("videos/sequence_11/images/")
+    fast = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
+    
+    # Feature detection on the 1st frame
+    prevFrame = frameReader.readFrame(0)
+    prevPts = cv2.KeyPoint_convert(fast.detect(prevFrame))
+    print("Detected {} features in the first frame".format(len(prevPts)))
+
+    # Feature tracking on the 2nd frame
+    currFrame = frameReader.readFrame(1)
+    prevPts, currPts = trackFeatures(prevFrame, currFrame, prevPts)
+
+    # Calculate camera parameters and find E (focal and p.p. were taken from camera.txt file)
+    K, focal, pp = calculateCameraMatrix()
     
     E, mask = cv2.findEssentialMat(prevPts, currPts, focal, pp, cv2.RANSAC, 0.99, 1.0)
+    retval, finalR, finalT, mask = cv2.recoverPose(E, currPts, prevPts, K)
     print("Constructed camera matrix {}:\n{}".format(K.shape, K))
     print("Essential matrix {} calculated:\n{}".format(E.shape, E))
-
-    retval, R, t, mask = cv2.recoverPose(E, currPts, prevPts, K)
-    print("Computed rotation matrix {}:\n{}".format(R.shape, R))
-    print("Computed translation matrix {}:\n{}".format(t.shape, t))
+    print("Computed rotation matrix {}:\n{}".format(finalR.shape, finalR))
+    print("Computed translation matrix {}:\n{}".format(finalT.shape, finalT))
     
     prevFrame = currFrame
     prevPts = currPts
 
+    # trajectoryImage = np.zeros((300, 300, 3), np.uint8)
+
     # Process next frames
     for frameIdx in range(2, frameReader.getFramesCount()):
-        # Read next frame and track features
-        currFrame = cv2.cvtColor(frameReader.readFrame(frameIdx), cv2.COLOR_RGB2GRAY)
-        currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
-
-        # Filter out features that were not tracked (status=0) or are outside the image
-        wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
-        prevPts = np.delete(prevPts, wrongIndices, axis=0)
-        currPts = np.delete(currPts, wrongIndices, axis=0)
-        # if frameIdx % 10 == 0:
-            # print("Tracked {} features in frame #{} after filtering".format(len(currPts), frameIdx))
-
-        # Retrack if too many features were filtered out (less than 50 points left)
-        if len(currPts) < 50:
+        # Retrack if too many features were filtered out (less than ... points left)
+        if len(prevPts) < 25:
             prevPts = cv2.KeyPoint_convert(fast.detect(currFrame))
-            currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
-            
-            wrongIndices = calcWrongFeatureIndices(currPts, currFrame, status)
-            prevPts = np.delete(prevPts, wrongIndices, axis=0)
-            currPts = np.delete(currPts, wrongIndices, axis=0)
-            # print("Too few features in frame #{}, {} features detected after retracking".format(frameIdx, len(currPts)))
+        
+        # Read next frame and track features
+        currFrame = frameReader.readFrame(frameIdx)
+        prevPts, currPts = trackFeatures(prevFrame, currFrame, prevPts)
+
+        E, mask = cv2.findEssentialMat(prevPts, currPts, focal, pp, cv2.RANSAC, 0.99, 1.0)
+        retval, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
+
+        # scale = 1.0 # TODO: not used now
+        # finalT = T
+        # finalR = finalR * R
+        # x = int(finalT[0] + (trajectoryImage.shape[1] / 2)) 
+        # y = int(finalT[1] + (trajectoryImage.shape[0] / 2))
+        # cv2.circle(trajectoryImage, (x, y), radius=3, color=(100, 200, 0))
 
         # Display current frame with motion vectors and some information (frame id, # of features)
-        currFrameRGB = cv2.cvtColor(currFrame, cv2.COLOR_GRAY2RGB)
-        for i in range(len(currPts)-1):
-            cv2.circle(currFrameRGB, tuple(currPts[i]), radius=3, color=(200, 100, 0))
-            cv2.line(currFrameRGB, tuple(prevPts[i]), tuple(currPts[i]), color=(200, 100, 0))
-        cv2.putText(currFrameRGB, "Frame: {}".format(frameIdx), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
-        cv2.putText(currFrameRGB, "Features: {}".format(len(currPts)), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))
-        cv2.imshow("Frame with keypoints", currFrameRGB)
-
+        drawFrameFeatures(currFrame, prevPts, currPts)
+        
         if cv2.waitKey(1) == ord('q'):
             break
 
