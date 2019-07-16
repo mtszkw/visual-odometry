@@ -66,7 +66,7 @@ if __name__ == "__main__":
         currentPos = currentPos + scale * currentRot.dot(T)
         currentRot = R.dot(currentRot)
 
-        print(currentPos.transpose())
+        print("In frame", frameIdx, "... T =",currentPos.transpose())
 
         x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
         y = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
