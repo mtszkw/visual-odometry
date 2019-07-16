@@ -7,15 +7,20 @@ from FeatureTracker import FeatureTracker
 # Calculates camera matrix given focal and principal point information.
 # @returns Camera matrix, focal, principal point.
 def calculateCameraMatrix():
-    fx = 0.349153000000000
-    fy = 0.436593000000000
-    cx = 0.493140000000000
-    cy = 0.499021000000000
+    # fx, fy = 0.4, 0.53
+    # cx, cy = 0.5, 0.5
+    fx, fy = 0.349153000000000, 0.436593000000000
+    cx, cy = 0.493140000000000, 0.499021000000000
+    in_width, in_height = 1280, 1024
     
-    focal = (fx + fy) / 2
-    pp = (cx, cy)
-    K = np.array([ [fx, 0, cx], [0, fy, cy], [0, 0, 1] ])
-    return K, focal, pp
+    K = np.zeros((3,3))
+    K[0, 0] = fx * in_width
+    K[0, 2] = cx * in_width - 0.5
+    K[1, 1] = fy * in_height
+    K[1, 2] = cy * in_height - 0.5
+    K[2, 2] = 1
+    print("Constructed camera matrix {}:\n{}".format(K.shape, K))
+    return K
 
 
 # Draws detected and tracked features on a frame (motion vector is drawn as a line).
@@ -37,48 +42,36 @@ if __name__ == "__main__":
     detector = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
     tracker = FeatureTracker()
 
-    # Feature detection on the 1st frame
+    K = calculateCameraMatrix()
+    
+    currentRot = np.eye(3)
+    currentPos = np.zeros((3,1))
+    trajectoryImage = np.zeros((300, 300, 3), np.uint8)
+
+    prevPts = np.empty(0)
     prevFrame = frameReader.readFrame(0)
-    prevPts = cv2.KeyPoint_convert(detector.detect(prevFrame))
-    print("Detected {} features in the first frame".format(len(prevPts)))
-
-    # Feature tracking on the 2nd frame
-    currFrame = frameReader.readFrame(1)
-    prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts)
-
-    # Calculate camera parameters and find E (focal and p.p. were taken from camera.txt file)
-    K, focal, pp = calculateCameraMatrix()
-    
-    E, mask = cv2.findEssentialMat(prevPts, currPts, focal, pp, cv2.RANSAC, 0.99, 1.0)
-    retval, finalR, finalT, mask = cv2.recoverPose(E, currPts, prevPts, K)
-    print("Constructed camera matrix {}:\n{}".format(K.shape, K))
-    print("Essential matrix {} calculated:\n{}".format(E.shape, E))
-    print("Computed rotation matrix {}:\n{}".format(finalR.shape, finalR))
-    print("Computed translation matrix {}:\n{}".format(finalT.shape, finalT))
-    
-    prevFrame = currFrame
-    prevPts = currPts
-
-    # trajectoryImage = np.zeros((300, 300, 3), np.uint8)
 
     # Process next frames
-    for frameIdx in range(2, frameReader.getFramesCount()):
-        # Retrack if too many features were filtered out (less than ... points left)
+    for frameIdx in range(1, frameReader.getFramesCount()):
         if len(prevPts) < 25:
-            prevPts = cv2.KeyPoint_convert(detector.detect(currFrame))
+            prevPts = cv2.KeyPoint_convert(detector.detect(prevFrame))
         
         currFrame = frameReader.readFrame(frameIdx)
         prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts)
 
-        E, mask = cv2.findEssentialMat(prevPts, currPts, focal, pp, cv2.RANSAC, 0.99, 1.0)
-        retval, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
+        E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
+        _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
 
-        # scale = 1.0 # TODO: not used now
-        # finalT = T
-        # finalR = finalR * R
-        # x = int(finalT[0] + (trajectoryImage.shape[1] / 2)) 
-        # y = int(finalT[1] + (trajectoryImage.shape[0] / 2))
-        # cv2.circle(trajectoryImage, (x, y), radius=3, color=(100, 200, 0))
+        scale = 1.0 # TODO: not used now
+        currentPos = currentPos + scale * currentRot.dot(T)
+        currentRot = R.dot(currentRot)
+
+        print(currentPos.transpose())
+
+        x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
+        y = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
+        cv2.circle(trajectoryImage, (x, y), radius=1, color=(100, 200, 0))
+        cv2.imshow("Trajectory", trajectoryImage)
 
         drawFrameFeatures(currFrame, prevPts, currPts)
         if cv2.waitKey(1) == ord('q'):
