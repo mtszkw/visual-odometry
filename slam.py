@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from FrameReader import FrameReader
+from DatasetReader import DatasetReaderTUM
 from FeatureTracker import FeatureTracker
 
 # Calculates camera matrix given focal and principal point information.
@@ -38,31 +38,31 @@ def drawFrameFeatures(frame, prevPts, currPts):
     
 
 if __name__ == "__main__":
-    frameReader = FrameReader("videos/sequence_11/images/")
+    datasetReader = DatasetReaderTUM("videos/sequence_11/")
     detector = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
     tracker = FeatureTracker()
 
-    K = calculateCameraMatrix()
+    K = datasetReader.readCameraMatrix()
     
     currentRot = np.eye(3)
     currentPos = np.zeros((3,1))
     trajectoryImage = np.zeros((300, 300, 3), np.uint8)
 
     prevPts = np.empty(0)
-    prevFrame = frameReader.readFrame(0)
+    prevFrame = datasetReader.readFrame(0)
 
     # Process next frames
-    for frameIdx in range(1, frameReader.getFramesCount()):
+    for frameIdx in range(1, datasetReader.getFramesCount()):
         if len(prevPts) < 25:
             prevPts = cv2.KeyPoint_convert(detector.detect(prevFrame))
         
-        currFrame = frameReader.readFrame(frameIdx)
+        currFrame = datasetReader.readFrame(frameIdx)
         prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts)
 
         E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
 
-        scale = 1.0 # TODO: not used now
+        scale = datasetReader.readGroundtuthScale(frameIdx)
         currentPos = currentPos + scale * currentRot.dot(T)
         currentRot = R.dot(currentRot)
 
