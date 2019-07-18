@@ -30,18 +30,19 @@ def vignetteFiltering(prevPts, currPts, vignette):
 
 
 if __name__ == "__main__":
-    datasetReader = DatasetReaderTUM("videos/sequence_11/")
+    datasetReader = DatasetReaderTUM("videos/sequence_11/", scale=0.75)
     detector = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
     tracker = FeatureTracker()
 
-    K = datasetReader.readCameraMatrix()
-    
     currentRot = np.eye(3)
     currentPos = np.zeros((3,1))
+    K = datasetReader.readCameraMatrix()
     trajectoryImage = np.zeros((300, 300, 3), np.uint8)
-
+    
     prevPts = np.empty(0)
     prevFrame = datasetReader.readFrame(0)
+
+    vignette = datasetReader.readVignette()
 
     # Process next frames
     for frameIdx in range(1, datasetReader.getFramesCount()):
@@ -50,7 +51,7 @@ if __name__ == "__main__":
         
         currFrame = datasetReader.readFrame(frameIdx)
         prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts, removeOutliers=True)
-        prevPts, currPts = vignetteFiltering(prevPts, currPts, datasetReader.readVignette())
+        prevPts, currPts = vignetteFiltering(prevPts, currPts, vignette)
 
         E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
@@ -58,8 +59,6 @@ if __name__ == "__main__":
         scale = datasetReader.readGroundtuthScale(frameIdx)
         currentPos = currentPos + scale * currentRot.dot(T)
         currentRot = R.dot(currentRot)
-
-        print("In frame", frameIdx, "... T =",currentPos.transpose())
 
         x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
         y = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
