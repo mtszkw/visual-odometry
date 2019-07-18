@@ -4,25 +4,6 @@ import numpy as np
 from DatasetReader import DatasetReaderTUM
 from FeatureTracker import FeatureTracker
 
-# Calculates camera matrix given focal and principal point information.
-# @returns Camera matrix, focal, principal point.
-def calculateCameraMatrix():
-    # fx, fy = 0.4, 0.53
-    # cx, cy = 0.5, 0.5
-    fx, fy = 0.349153000000000, 0.436593000000000
-    cx, cy = 0.493140000000000, 0.499021000000000
-    in_width, in_height = 1280, 1024
-    
-    K = np.zeros((3,3))
-    K[0, 0] = fx * in_width
-    K[0, 2] = cx * in_width - 0.5
-    K[1, 1] = fy * in_height
-    K[1, 2] = cy * in_height - 0.5
-    K[2, 2] = 1
-    print("Constructed camera matrix {}:\n{}".format(K.shape, K))
-    return K
-
-
 # Draws detected and tracked features on a frame (motion vector is drawn as a line).
 # @param frame Frame to be used for drawing (will be converted to RGB).
 # @param prevPts Previous frame keypoints.
@@ -36,6 +17,17 @@ def drawFrameFeatures(frame, prevPts, currPts):
         cv2.putText(currFrameRGB, "Features: {}".format(len(currPts)), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200))    
     cv2.imshow("Frame with keypoints", currFrameRGB)
     
+
+def vignetteFiltering(prevPts, currPts, vignette):
+    wrongIndices = []
+    ret, thVign = cv2.threshold(vignette, 127, 255, cv2.THRESH_BINARY)
+    for i in range(len(prevPts)-1):
+        if thVign[int(prevPts[i, 1]), int(prevPts[i, 0])] == 0 or thVign[int(currPts[i, 1]), int(currPts[i, 0])] == 0:
+            wrongIndices.append(i)
+    prevPts = np.delete(prevPts, wrongIndices, axis=0)
+    currPts = np.delete(currPts, wrongIndices, axis=0)
+    return prevPts, currPts
+
 
 if __name__ == "__main__":
     datasetReader = DatasetReaderTUM("videos/sequence_11/")
@@ -57,7 +49,8 @@ if __name__ == "__main__":
             prevPts = cv2.KeyPoint_convert(detector.detect(prevFrame))
         
         currFrame = datasetReader.readFrame(frameIdx)
-        prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts)
+        prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts, removeOutliers=True)
+        prevPts, currPts = vignetteFiltering(prevPts, currPts, datasetReader.readVignette())
 
         E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)

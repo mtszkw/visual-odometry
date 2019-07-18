@@ -19,13 +19,16 @@ class FeatureTracker:
     # @param prevFrame Previous image.
     # @param currFrame Current (next) image.
     # @param prevPts Features detected on previous frame.
+    # @param removeOutliers Set to true if you want to remove bad features after tracking.
     # @returns Features from previous and current frame (tracked), both filtered.
-    def trackFeatures(self, prevFrame, currFrame, prevPts):
+    def trackFeatures(self, prevFrame, currFrame, prevPts, removeOutliers=False):
         # Feature tracking on the 2nd frame
         currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
 
-        # Filter out features that were not tracked (status=0) or are outside the image
-        wrongIndices = self.calcWrongFeatureIndices(currPts, currFrame, status)
-        prevPts = np.delete(prevPts, wrongIndices, axis=0)
-        currPts = np.delete(currPts, wrongIndices, axis=0)
+        if removeOutliers:
+            # Filter out features that were not tracked (status=0) or are outside the image
+            wrongIndices = self.calcWrongFeatureIndices(currPts, currFrame, status)
+            prevPts = np.delete(prevPts, wrongIndices, axis=0)
+            currPts = np.delete(currPts, wrongIndices, axis=0)
+            
         return prevPts, currPts

@@ -20,7 +20,7 @@ class DatasetReaderTUM:
             raise Exception("Cannot read frame number {} from {}".format(index, self._imagesPath))
 
         img = cv2.imread(os.path.join(self._imagesPath, "{:05d}.jpg".format(index)), cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (int(img.shape[1] * 3 / 4), int(img.shape[0] * 3 / 4)))
+        # img = cv2.resize(img, (int(img.shape[1] * 3 / 4), int(img.shape[0] * 3 / 4)))
         return img
 
     def readCameraMatrix(self):
@@ -54,6 +54,10 @@ class DatasetReaderTUM:
                 return 0.1
 
             return sqrt((tx-tx_prev) * (tx-tx_prev) + (ty-ty_prev) * (ty-ty_prev) + (tz-tz_prev) * (tz-tz_prev))
+
+    def readVignette(self):
+        img = cv2.imread(os.path.join(self._datasetPath, "vignette.png"), cv2.IMREAD_GRAYSCALE)
+        return img
 
     def getFramesCount(self):
         return self._numFrames
