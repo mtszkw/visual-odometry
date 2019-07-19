@@ -4,12 +4,12 @@ import numpy as np
 from math import isnan, sqrt
 
 class DatasetReaderTUM:
-    def __init__(self, datasetPath, scale=1.0):
+    def __init__(self, datasetPath, scaling=1.0):
         __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
         self._datasetPath = os.path.join(__location__, datasetPath)
         self._imagesPath = os.path.join(self._datasetPath, "images")
         self._numFrames = len([x for x in os.listdir(self._imagesPath) if x.endswith(".jpg")])
-        self._scale = scale
+        self._scaling = scaling
 
         if self._numFrames < 2:
             raise Exception("Not enough images ({}) found, aborting.".format(frameReader.getFramesCount()))
@@ -21,7 +21,7 @@ class DatasetReaderTUM:
             raise Exception("Cannot read frame number {} from {}".format(index, self._imagesPath))
 
         img = cv2.imread(os.path.join(self._imagesPath, "{:05d}.jpg".format(index)), cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (int(img.shape[1] * self._scale), int(img.shape[0] * self._scale)))
+        img = cv2.resize(img, (int(img.shape[1] * self._scaling), int(img.shape[0] * self._scaling)))
         return img
 
     def readCameraMatrix(self):
@@ -40,7 +40,7 @@ class DatasetReaderTUM:
             return K
 
 
-    def readGroundtuthScale(self, frameId):
+    def readGroundtuthPosition(self, frameId):
         groundtruthFile = os.path.join(self._datasetPath, "groundtruthSync.txt")
         with open(groundtruthFile) as f:
             lines = f.readlines()
@@ -52,13 +52,15 @@ class DatasetReaderTUM:
                 _, tx_prev, ty_prev, tz_prev, _, _, _, _ = list(map(float, lines[frameId-1].rstrip().split(" ")))
 
             if isnan(tx) or isnan(ty) or isnan(tz) or isnan(tx_prev) or isnan(ty_prev) or isnan(tz_prev):
-                return 0.1
+                return float('nan')
 
-            return sqrt((tx-tx_prev) * (tx-tx_prev) + (ty-ty_prev) * (ty-ty_prev) + (tz-tz_prev) * (tz-tz_prev))
+            scale = sqrt((tx-tx_prev) * (tx-tx_prev) + (ty-ty_prev) * (ty-ty_prev) + (tz-tz_prev) * (tz-tz_prev))
+            position = (tx, ty, tz)
+            return position, scale
 
     def readVignette(self):
         img = cv2.imread(os.path.join(self._datasetPath, "vignette.png"), cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (int(img.shape[1] * self._scale), int(img.shape[0] * self._scale)))
+        img = cv2.resize(img, (int(img.shape[1] * self._scaling), int(img.shape[0] * self._scaling)))
         return img
 
     def getFramesCount(self):

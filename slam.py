@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from math import isnan
 
 from DatasetReader import DatasetReaderTUM
 from FeatureTracker import FeatureTracker
@@ -30,14 +31,15 @@ def vignetteFiltering(prevPts, currPts, vignette):
 
 
 if __name__ == "__main__":
-    datasetReader = DatasetReaderTUM("videos/sequence_11/", scale=0.75)
+    datasetReader = DatasetReaderTUM("videos/sequence_11/", scaling=0.75)
     detector = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
     tracker = FeatureTracker()
 
+    scale = 0.1
     currentRot = np.eye(3)
     currentPos = np.zeros((3,1))
     K = datasetReader.readCameraMatrix()
-    trajectoryImage = np.zeros((300, 300, 3), np.uint8)
+    trajectoryImage = np.zeros((500, 500, 3), np.uint8)
     
     prevPts = np.empty(0)
     prevFrame = datasetReader.readFrame(0)
@@ -56,13 +58,22 @@ if __name__ == "__main__":
         E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
 
-        scale = datasetReader.readGroundtuthScale(frameIdx)
-        currentPos = currentPos + scale * currentRot.dot(T)
+        groundTruth = datasetReader.readGroundtuthPosition(frameIdx)
+        if isinstance(groundTruth, tuple):
+            groundPos, groundScale = groundTruth
+            # print("Scale for frame {} is {}".format(frameIdx, groundScale))
+            ground_x = int(groundPos[0] + (trajectoryImage.shape[1] / 2)) 
+            ground_z = int(groundPos[2] + (trajectoryImage.shape[0] / 2))
+            cv2.circle(trajectoryImage, (ground_x, ground_z), radius=15, color=(0, 150, 0))
+        else:
+            groundScale = 0.1
+
+        currentPos = currentPos + groundScale * currentRot.dot(T)
         currentRot = R.dot(currentRot)
 
         x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
-        y = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
-        cv2.circle(trajectoryImage, (x, y), radius=1, color=(100, 200, 0))
+        z = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
+        cv2.circle(trajectoryImage, (x, z), radius=15, color=(200, 200, 200))
         cv2.imshow("Trajectory", trajectoryImage)
 
         drawFrameFeatures(currFrame, prevPts, currPts)
