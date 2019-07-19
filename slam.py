@@ -3,6 +3,7 @@ import numpy as np
 from math import isnan
 
 from DatasetReader import DatasetReaderTUM
+from DatasetReaderKITTI import DatasetReaderKITTI
 from FeatureTracker import FeatureTracker
 
 # Draws detected and tracked features on a frame (motion vector is drawn as a line).
@@ -31,21 +32,21 @@ def vignetteFiltering(prevPts, currPts, vignette):
 
 
 if __name__ == "__main__":
-    datasetReader = DatasetReaderTUM("videos/sequence_11/", scaling=0.75)
+    # datasetReader = DatasetReaderTUM("videos/sequence_11/", scaling=0.75)
+    datasetReader = DatasetReaderKITTI("videos/KITTI/data_odometry_gray/dataset/sequences/00/")
+
     detector = cv2.FastFeatureDetector_create(threshold=50, nonmaxSuppression=True)
     tracker = FeatureTracker()
 
-    scale = 0.1
     currentRot = np.eye(3)
     currentPos = np.zeros((3,1))
     K = datasetReader.readCameraMatrix()
+    # vignette = datasetReader.readVignette()
     trajectoryImage = np.zeros((500, 500, 3), np.uint8)
     
     prevPts = np.empty(0)
     prevFrame = datasetReader.readFrame(0)
-
-    vignette = datasetReader.readVignette()
-
+ 
     # Process next frames
     for frameIdx in range(1, datasetReader.getFramesCount()):
         if len(prevPts) < 25:
@@ -53,28 +54,28 @@ if __name__ == "__main__":
         
         currFrame = datasetReader.readFrame(frameIdx)
         prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts, removeOutliers=True)
-        prevPts, currPts = vignetteFiltering(prevPts, currPts, vignette)
+        # prevPts, currPts = vignetteFiltering(prevPts, currPts, vignette)
 
         E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
 
-        groundTruth = datasetReader.readGroundtuthPosition(frameIdx)
-        if isinstance(groundTruth, tuple):
-            groundPos, groundScale = groundTruth
+        # groundTruth = datasetReader.readGroundtuthPosition(frameIdx)
+        # if isinstance(groundTruth, tuple):
+            # groundPos, groundScale = groundTruth
             # print("Scale for frame {} is {}".format(frameIdx, groundScale))
-            ground_x = int(groundPos[0] + (trajectoryImage.shape[1] / 2)) 
-            ground_z = int(groundPos[2] + (trajectoryImage.shape[0] / 2))
-            cv2.circle(trajectoryImage, (ground_x, ground_z), radius=15, color=(0, 150, 0))
-        else:
-            groundScale = 0.1
+            # ground_x = int(groundPos[0] + (trajectoryImage.shape[1] / 2)) 
+            # ground_z = int(groundPos[2] + (trajectoryImage.shape[0] / 2))
+            # cv2.circle(trajectoryImage, (ground_x, ground_z), radius=15, color=(0, 150, 0))
+        # else:
+            # groundScale = 0.1
 
-        currentPos = currentPos + groundScale * currentRot.dot(T)
-        currentRot = R.dot(currentRot)
+        # currentPos = currentPos + groundScale * currentRot.dot(T)
+        # currentRot = R.dot(currentRot)
 
-        x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
-        z = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
-        cv2.circle(trajectoryImage, (x, z), radius=15, color=(200, 200, 200))
-        cv2.imshow("Trajectory", trajectoryImage)
+        # x = int(currentPos[0] + (trajectoryImage.shape[1] / 2)) 
+        # z = int(currentPos[2] + (trajectoryImage.shape[0] / 2))
+        # cv2.circle(trajectoryImage, (x, z), radius=15, color=(200, 200, 200))
+        # cv2.imshow("Trajectory", trajectoryImage)
 
         drawFrameFeatures(currFrame, prevPts, currPts)
         if cv2.waitKey(1) == ord('q'):
