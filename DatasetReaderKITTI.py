@@ -39,23 +39,18 @@ class DatasetReaderKITTI:
             print("Constructed camera matrix {}:\n{}".format(K.shape, K))
             return K
 
-    # def readGroundtuthPosition(self, frameId):
-    #     groundtruthFile = os.path.join(self._datasetPath, "groundtruthSync.txt")
-    #     with open(groundtruthFile) as f:
-    #         lines = f.readlines()
-    #         _, tx, ty, tz, _, _, _, _ = list(map(float, lines[frameId].rstrip().split(" ")))
+    def readGroundtuthPosition(self, frameId):
+        groundtruthFile = os.path.join(self._datasetPath, "poses.txt")
+        with open(groundtruthFile) as f:
+            lines = f.readlines()
+
+            _, _, _, tx, _, _, _, ty, _, _, _, tz = list(map(float, lines[frameId].rstrip().split(" ")))
+            _, _, _, tx_prev, _, _, _, ty_prev, _, _, _, tz_prev = list(map(float, lines[frameId-1].rstrip().split(" ")))
+    
+            position = (tx, ty, tz)
+            scale = sqrt((tx-tx_prev)**2 + (ty-ty_prev)**2  + (tz-tz_prev)**2)
             
-    #         if frameId == 0:
-    #             tx_prev, ty_prev, tz_prev = 0, 0, 0
-    #         else:
-    #             _, tx_prev, ty_prev, tz_prev, _, _, _, _ = list(map(float, lines[frameId-1].rstrip().split(" ")))
-
-    #         if isnan(tx) or isnan(ty) or isnan(tz) or isnan(tx_prev) or isnan(ty_prev) or isnan(tz_prev):
-    #             return float('nan')
-
-    #         scale = sqrt((tx-tx_prev) * (tx-tx_prev) + (ty-ty_prev) * (ty-ty_prev) + (tz-tz_prev) * (tz-tz_prev))
-    #         position = (tx, ty, tz)
-    #         return position, scale
+            return position, scale
 
     # def readVignette(self):
     #     img = cv2.imread(os.path.join(self._datasetPath, "vignette.png"), cv2.IMREAD_GRAYSCALE)
