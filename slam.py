@@ -23,8 +23,6 @@ if __name__ == "__main__":
     # Prepare image for drawing trajectory
     voTruthPoints = []
     voTrackedPoints = []
-    trajectoryImage = np.zeros((600, 600, 3), np.uint8)
-    trajOffsetX, trajOffsetY = (trajectoryImage.shape[1] / 2), (trajectoryImage.shape[0] / 2)
     
     # Process next frames
     for frameIdx in range(1, datasetReader.getFramesCount()-1):
@@ -39,23 +37,11 @@ if __name__ == "__main__":
 
         truthT, truthScale = datasetReader.readGroundtuthPosition(frameIdx)
         if truthScale > 0.1:
-            # truthX = int(0.5 * truthT[0] + trajOffsetX) 
-            # truthY = int(trajOffsetY - truthT[2] * 0.5)
-            # cv2.circle(trajectoryImage, (truthX, truthY), radius=1, color=(0, 150, 0))
-
             currT = currT + truthScale * currR.dot(T)
             currR = R.dot(currR)
 
-            # x = int(0.5 * currT[0] + trajOffsetX) 
-            # y = int(trajOffsetY - currT[2] * 0.5)
-            # cv2.circle(trajectoryImage, (x, y), radius=1, color=(200, 200, 200))
-        
             voTruthPoints.append([truthT[0], truthT[2]])
             voTrackedPoints.append([currT[0], currT[2]])
-        # cv2.imshow("Trajectory", trajectoryImage)
-            # plt.scatter(x, y, c='blue')
-            # plt.scatter(truthX, truthY, c='green')
-        # plt.imshow(trajectoryImage)
 
         drawFrameFeatures(currFrame, prevPts, currPts, frameIdx)
         if cv2.waitKey(1) == ord('q'):
