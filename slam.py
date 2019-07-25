@@ -27,7 +27,9 @@ if __name__ == "__main__":
     # Process next frames
     for frameIdx in range(1, datasetReader.getFramesCount()-1):
         # if len(prevPts) < 50:
-        prevPts = cv2.KeyPoint_convert(detector.detect(prevFrame))
+        prevPts = detector.detect(prevFrame)
+        prevPts = sorted(prevPts, key = lambda p: p.response, reverse=True)[:1000]
+        prevPts = cv2.KeyPoint_convert(prevPts)
         
         currFrame = datasetReader.readFrame(frameIdx)
         prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts, removeOutliers=True)
