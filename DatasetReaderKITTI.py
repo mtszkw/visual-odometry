@@ -37,7 +37,7 @@ class DatasetReaderKITTI:
             K[1, 2] = cy
             K[2, 2] = 1
             print("Constructed camera matrix {}:\n{}".format(K.shape, K))
-            return K
+            return K, focal, (cx, cy)
 
     def readGroundtuthPosition(self, frameId):
         groundtruthFile = os.path.join(self._datasetPath, "poses.txt")

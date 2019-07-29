@@ -17,6 +17,11 @@ def createPointCloud(points, colors, filename):
     cloud.to_file(filename)
 
 
+def normalizePoints(points, focal, pp):
+    points = [ [(p[0] - pp[0]) / focal, (p[1] - pp[1]) / focal] for p in points]
+    return points
+
+
 def updateTrajectoryDrawing(trackedPoints, groundtruthPoints):
     plt.cla()
     plt.plot(trackedPoints[:,0], trackedPoints[:,1], c='blue', label="Tracking")
@@ -32,12 +37,12 @@ if __name__ == "__main__":
     detector = cv2.FastFeatureDetector_create(threshold=20, nonmaxSuppression=True)
     datasetReader = DatasetReaderKITTI("videos/KITTI/data_odometry_gray/dataset/sequences/00/")
 
-    K = datasetReader.readCameraMatrix()
+    K, focal, pp = datasetReader.readCameraMatrix()
     prevFrameBGR = datasetReader.readFrame(0)
     
     prevPts = np.empty(0)
     voTruthPoints, voTrackPoints = [], []
-    currR, currT = np.eye(3), np.zeros((3,1))
+    rotation, position = np.eye(3), np.zeros((3,1))
     
     plt.show()
 
@@ -62,42 +67,41 @@ if __name__ == "__main__":
         _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
 
         # Read groundtruth translation T and absolute scale for computing trajectory
-        truthT, truthScale = datasetReader.readGroundtuthPosition(frameIdx)
+        truthPos, truthScale = datasetReader.readGroundtuthPosition(frameIdx)
         if truthScale <= 0.1:
             continue
 
         # Update the pose
-        currT = currT + truthScale * currR.dot(T)
-        currR = R.dot(currR)
+        position = position + truthScale * rotation.dot(T)
+        rotation = R.dot(rotation)
+
+        # Reconstruct 3D points
+        if frameIdx == 1:
+            P = np.hstack((R, T))
+            triangPoints = cv2.triangulatePoints(np.eye(3, 4), P,
+                np.transpose(normalizePoints(prevPts, focal=focal, pp=pp)),
+                np.transpose(normalizePoints(currPts, focal=focal, pp=pp))
+            )
+
+            triangPoints = np.transpose(triangPoints)
+            triangPoints = np.array([[x/w, y/w, z/w] for [x, y, z, w] in triangPoints])
+
+            colors = np.array([currFrameBGR[int(pt[1]),int(pt[0])] for pt in prevPts])
+            print(colors)
+            createPointCloud(triangPoints, colors, "slam_cloud.ply")
 
         # Update vectors of tracked and ground truth positions, draw trajectory
-        voTrackPoints.append([currT[0], currT[2]])
-        voTruthPoints.append([truthT[0], truthT[2]])
+        voTrackPoints.append([position[0], position[2]])
+        voTruthPoints.append([truthPos[0], truthPos[2]])
         updateTrajectoryDrawing(np.array(voTrackPoints), np.array(voTruthPoints))
         drawFrameFeatures(currFrame, prevPts, currPts, frameIdx)
 
         if cv2.waitKey(1) == ord('q'):
             break
-        
-        winSize, minDisp, maxDisp = 5, -1, 63
-        stereo = cv2.StereoSGBM_create(minDisparity=minDisp, numDisparities=(maxDisp - minDisp), blockSize=5,
-        uniquenessRatio=5, speckleWindowSize=5, speckleRange=5, disp12MaxDiff=1, P1=8*3*winSize**2, P2=32*3*winSize**2)
-        disparityMap = stereo.compute(prevFrame, currFrame)
-
-        focal_length = K[0, 0]
-        Q2 = np.float32([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, focal_length*0.05, 0], [0, 0, 0, 1]])
-
-        points_3D = cv2.reprojectImageTo3D(disparityMap, Q2)
-        colors = cv2.cvtColor(currFrameBGR, cv2.COLOR_BGR2RGB)
-        mask_map = disparityMap > disparityMap.min()
-        output_points = points_3D[mask_map]
-        output_colors = colors[mask_map]
-        createPointCloud(output_points, output_colors, "slam.ply")
-        
+               
         # Consider current frame as previous for the next step
-        prevFrameBGR = currFrameBGR
-        prevPts = currPts
-
+        prevPts, prevFrameBGR = currPts, currFrameBGR
+    
     # plt.savefig('trajectory.png')
     cv2.waitKey(0)
     cv2.destroyAllWindows()
