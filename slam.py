@@ -23,6 +23,7 @@ if __name__ == "__main__":
     
     # Prepare image for drawing trajectory
     voTruthPoints, voTrackPoints = [], []
+    plt.show()
 
     # Process next frames
     for frameIdx in range(1, datasetReader.getFramesCount()-1):
@@ -45,6 +46,14 @@ if __name__ == "__main__":
             voTruthPoints.append([truthT[0], truthT[2]])
             voTrackPoints.append([currT[0], currT[2]])
 
+            plt.cla()
+            plt.plot(np.array(voTrackPoints)[:,0], np.array(voTrackPoints)[:,1], c='blue', label="Estimation")
+            plt.plot(np.array(voTruthPoints)[:,0], np.array(voTruthPoints)[:,1], c='green', label="Ground truth")
+            plt.title("Trajectory")
+            plt.legend()
+            plt.draw()
+            plt.pause(0.01)
+
         drawFrameFeatures(currFrame, prevPts, currPts, frameIdx)
         if cv2.waitKey(1) == ord('q'):
             break
@@ -52,12 +61,6 @@ if __name__ == "__main__":
         prevFrame = currFrame
         prevPts = currPts
 
+    plt.savefig('trajectory.png')
+    cv2.waitKey(0)
     cv2.destroyAllWindows()
-
-    plt.title("Trajectory")
-    voTruthPoints = np.array(voTruthPoints)
-    voTrackPoints = np.array(voTrackPoints)
-    plt.scatter(voTruthPoints[:,0], voTruthPoints[:,1], c='green', label="Ground truth")
-    plt.scatter(voTrackPoints[:,0], voTrackPoints[:,1], c='blue', label="Estimation")
-    plt.legend()
-    plt.show()
