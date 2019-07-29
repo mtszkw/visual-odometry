@@ -20,7 +20,7 @@ class DatasetReaderKITTI:
         if index >= self._numFrames:
             raise Exception("Cannot read frame number {} from {}".format(index, self._imagesPath))
 
-        img = cv2.imread(os.path.join(self._imagesPath, "{:06d}.png".format(index)), cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(os.path.join(self._imagesPath, "{:06d}.png".format(index)))
         img = cv2.resize(img, (int(img.shape[1] * self._scaling), int(img.shape[0] * self._scaling)))
         return img
 
