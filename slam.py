@@ -1,35 +1,16 @@
 import cv2
 import numpy as np
-import pandas as pd
-from math import isnan, sqrt
-from pyntcloud import PyntCloud
 import matplotlib.pyplot as plt
 
-from utils import drawFrameFeatures
 from DatasetReaderKITTI import DatasetReaderKITTI
 from FeatureTracker import FeatureTracker
-
-def createPointCloud(points, colors, filename):
-    cloud = PyntCloud(pd.DataFrame(
-        data=np.hstack((points, colors)),
-        columns=["x", "y", "z", "red", "green", "blue"])
-    )
-    cloud.to_file(filename)
+from Reconstruction3D import Reconstruction3D
+from utils import drawFrameFeatures, updateTrajectoryDrawing
 
 
 def normalizePoints(points, focal, pp):
     points = [ [(p[0] - pp[0]) / focal, (p[1] - pp[1]) / focal] for p in points]
     return points
-
-
-def updateTrajectoryDrawing(trackedPoints, groundtruthPoints):
-    plt.cla()
-    plt.plot(trackedPoints[:,0], trackedPoints[:,1], c='blue', label="Tracking")
-    plt.plot(groundtruthPoints[:,0], groundtruthPoints[:,1], c='green', label="Ground truth")
-    plt.title("Trajectory")
-    plt.legend()
-    plt.draw()
-    plt.pause(0.01)
 
 
 if __name__ == "__main__":   
@@ -44,10 +25,12 @@ if __name__ == "__main__":
     voTruthPoints, voTrackPoints = [], []
     rotation, position = np.eye(3), np.zeros((3,1))
     
+    cloudPoints, cloudColors = [], []
+
     plt.show()
 
     # Process next frames
-    for frameIdx in range(1, datasetReader.getFramesCount()-1):
+    for frameIdx in range(1, 500):
         prevFrame = cv2.cvtColor(prevFrameBGR, cv2.COLOR_BGR2GRAY)
 
         # Read current frame (and convert to grayscale)
@@ -76,25 +59,18 @@ if __name__ == "__main__":
         rotation = R.dot(rotation)
 
         # Reconstruct 3D points
-        if frameIdx == 1:
-            P = np.hstack((R, T))
-            triangPoints = cv2.triangulatePoints(np.eye(3, 4), P,
-                np.transpose(normalizePoints(prevPts, focal=focal, pp=pp)),
-                np.transpose(normalizePoints(currPts, focal=focal, pp=pp))
-            )
+        triangPoints = Reconstruction3D().triangulate(prevPts, currPts, P0=np.eye(3,4), P1=np.hstack((rotation, position)))
+        triangPoints = [[x/w, y/w, z/w] for [x, y, z, w] in triangPoints]
 
-            triangPoints = np.transpose(triangPoints)
-            triangPoints = np.array([[x/w, y/w, z/w] for [x, y, z, w] in triangPoints])
-
-            colors = np.array([currFrameBGR[int(pt[1]),int(pt[0])] for pt in prevPts])
-            print(colors)
-            createPointCloud(triangPoints, colors, "slam_cloud.ply")
+        colors = [currFrameBGR[int(pt[1]),int(pt[0])] for pt in prevPts]
+        cloudColors += colors
+        cloudPoints += triangPoints
 
         # Update vectors of tracked and ground truth positions, draw trajectory
         voTrackPoints.append([position[0], position[2]])
         voTruthPoints.append([truthPos[0], truthPos[2]])
-        updateTrajectoryDrawing(np.array(voTrackPoints), np.array(voTruthPoints))
         drawFrameFeatures(currFrame, prevPts, currPts, frameIdx)
+        updateTrajectoryDrawing(np.array(voTrackPoints), np.array(voTruthPoints))
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -102,6 +78,10 @@ if __name__ == "__main__":
         # Consider current frame as previous for the next step
         prevPts, prevFrameBGR = currPts, currFrameBGR
     
+    Reconstruction3D().createPointCloud(cloudPoints, cloudColors, filename="slam_cloud.ply")
+
     # plt.savefig('trajectory.png')
-    cv2.waitKey(0)
+    # cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+    
