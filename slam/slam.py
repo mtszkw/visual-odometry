@@ -19,7 +19,7 @@ def savePly(points, colors, output_file):
 if __name__ == "__main__":
     tracker = FeatureTracker()
     detector = cv2.FastFeatureDetector_create(threshold=20, nonmaxSuppression=True)
-    dataset_reader = DatasetReaderKITTI("videos/KITTI/sequences/00/")
+    dataset_reader = DatasetReaderKITTI("../videos/KITTI/sequences/00/")
 
     K = dataset_reader.readCameraMatrix()
 
