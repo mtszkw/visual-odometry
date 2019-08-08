@@ -19,8 +19,8 @@ def drawFrameFeatures(frame, prevPts, currPts, frameIdx):
 # @param groundtruthPoints
 def updateTrajectoryDrawing(trackedPoints, groundtruthPoints):
     plt.cla()
-    plt.plot(trackedPoints[:,0], trackedPoints[:,1], c='blue', label="Tracking")
-    plt.plot(groundtruthPoints[:,0], groundtruthPoints[:,1], c='green', label="Ground truth")
+    plt.plot(trackedPoints[:,0], trackedPoints[:,2], c='blue', label="Tracking")
+    plt.plot(groundtruthPoints[:,0], groundtruthPoints[:,2], c='green', label="Ground truth")
     plt.title("Trajectory")
     plt.legend()
     plt.draw()
