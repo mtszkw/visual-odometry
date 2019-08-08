@@ -1,87 +1,71 @@
 import cv2
+import plyfile
 import numpy as np
 import matplotlib.pyplot as plt
 
 from DatasetReaderKITTI import DatasetReaderKITTI
 from FeatureTracker import FeatureTracker
-from Reconstruction3D import Reconstruction3D
 from utils import drawFrameFeatures, updateTrajectoryDrawing
 
+def savePly(points, colors, output_file):
+    vertexes = [ (p[0], p[1], p[2], c[0], c[1], c[2]) for p, c in zip(points, colors)]
+    vertexes = [ v for v in vertexes if v[2] >= 0 ] # Discard negative z
+    dtypes = [('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    array = np.array(vertexes, dtype=dtypes)
+    element = plyfile.PlyElement.describe(array, "vertex")
+    plyfile.PlyData([element]).write(output_file)
 
-def normalizePoints(points, focal, pp):
-    points = [ [(p[0] - pp[0]) / focal, (p[1] - pp[1]) / focal] for p in points]
-    return points
 
-
-if __name__ == "__main__":   
+if __name__ == "__main__":
     tracker = FeatureTracker()
     detector = cv2.FastFeatureDetector_create(threshold=20, nonmaxSuppression=True)
-    datasetReader = DatasetReaderKITTI("videos/KITTI/data_odometry_gray/dataset/sequences/00/")
+    dataset_reader = DatasetReaderKITTI("videos/KITTI/sequences/00/")
 
-    K, focal, pp = datasetReader.readCameraMatrix()
-    prevFrameBGR = datasetReader.readFrame(0)
-    
-    prevPts = np.empty(0)
-    voTruthPoints, voTrackPoints = [], []
-    rotation, position = np.eye(3), np.zeros((3,1))
-    
-    cloudPoints, cloudColors = [], []
+    K = dataset_reader.readCameraMatrix()
+
+    prev_points = np.empty(0)
+    prev_frame_BGR = dataset_reader.readFrame(0)
+    kitti_positions, track_positions = [], []
+    camera_rot, camera_pos = np.eye(3), np.zeros((3,1))
 
     plt.show()
 
     # Process next frames
-    for frameIdx in range(1, 500):
-        prevFrame = cv2.cvtColor(prevFrameBGR, cv2.COLOR_BGR2GRAY)
+    for frame_no in range(1, 50):
+        curr_frame_BGR = dataset_reader.readFrame(frame_no)
+        prev_frame = cv2.cvtColor(prev_frame_BGR, cv2.COLOR_BGR2GRAY)
+        curr_frame = cv2.cvtColor(curr_frame_BGR, cv2.COLOR_BGR2GRAY)
 
-        # Read current frame (and convert to grayscale)
-        currFrameBGR = datasetReader.readFrame(frameIdx)
-        currFrame = cv2.cvtColor(currFrameBGR, cv2.COLOR_BGR2GRAY)
+        # Feature detection & filtering
+        prev_points = detector.detect(prev_frame)
+        prev_points = cv2.KeyPoint_convert(sorted(prev_points, key = lambda p: p.response, reverse=True)[:1000])
+    
+        # Feature tracking (optical flow)
+        prev_points, curr_points = tracker.trackFeatures(prev_frame, curr_frame, prev_points, removeOutliers=True)
 
-        # Detect keypoints in the frame, save only 1000 with best responses
-        prevPts = detector.detect(prevFrame)
-        prevPts = sorted(prevPts, key = lambda p: p.response, reverse=True)[:1000]
-        prevPts = cv2.KeyPoint_convert(prevPts)
+        # Essential matrix, pose estimation
+        E, mask = cv2.findEssentialMat(curr_points, prev_points, K, cv2.RANSAC, 0.99, 1.0, None)
+        prev_points = np.array([pt for (idx, pt) in enumerate(prev_points) if mask[idx] == 1])
+        curr_points = np.array([pt for (idx, pt) in enumerate(curr_points) if mask[idx] == 1])
+        _, R, T, _ = cv2.recoverPose(E, curr_points, prev_points, K)
         
-        # Track features between frames using optical flow
-        prevPts, currPts = tracker.trackFeatures(prevFrame, currFrame, prevPts, removeOutliers=True)
-
-        # Find the essential matrix using RANSAC and then R matrix and T vector between frames
-        E, mask = cv2.findEssentialMat(currPts, prevPts, K, cv2.RANSAC, 0.99, 1.0, None)
-        _, R, T, mask = cv2.recoverPose(E, currPts, prevPts, K)
-
         # Read groundtruth translation T and absolute scale for computing trajectory
-        truthPos, truthScale = datasetReader.readGroundtuthPosition(frameIdx)
-        if truthScale <= 0.1:
+        kitti_pos, kitti_scale = dataset_reader.readGroundtuthPosition(frame_no)
+        if kitti_scale <= 0.1:
             continue
 
-        # Update the pose
-        position = position + truthScale * rotation.dot(T)
-        rotation = R.dot(rotation)
+        camera_pos = camera_pos + kitti_scale * camera_rot.dot(T)
+        camera_rot = R.dot(camera_rot)
 
-        # Reconstruct 3D points
-        triangPoints = Reconstruction3D().triangulate(prevPts, currPts, P0=np.eye(3,4), P1=np.hstack((rotation, position)))
-        triangPoints = [[x/w, y/w, z/w] for [x, y, z, w] in triangPoints]
-
-        colors = [currFrameBGR[int(pt[1]),int(pt[0])] for pt in prevPts]
-        cloudColors += colors
-        cloudPoints += triangPoints
-
-        # Update vectors of tracked and ground truth positions, draw trajectory
-        voTrackPoints.append([position[0], position[2]])
-        voTruthPoints.append([truthPos[0], truthPos[2]])
-        drawFrameFeatures(currFrame, prevPts, currPts, frameIdx)
-        updateTrajectoryDrawing(np.array(voTrackPoints), np.array(voTruthPoints))
+        track_positions.append([camera_pos[0], camera_pos[2]])
+        kitti_positions.append([kitti_pos[0], kitti_pos[2]])
+        drawFrameFeatures(curr_frame, prev_points, curr_points, frame_no)
+        updateTrajectoryDrawing(np.array(track_positions), np.array(kitti_positions))
 
         if cv2.waitKey(1) == ord('q'):
             break
-               
-        # Consider current frame as previous for the next step
-        prevPts, prevFrameBGR = currPts, currFrameBGR
-    
-    Reconstruction3D().createPointCloud(cloudPoints, cloudColors, filename="slam_cloud.ply")
+            
+        prev_points, prev_frame_BGR = curr_points, curr_frame_BGR
 
-    # plt.savefig('trajectory.png')
-    # cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    
