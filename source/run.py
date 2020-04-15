@@ -3,18 +3,9 @@ import plyfile
 import numpy as np
 import matplotlib.pyplot as plt
 
-from DatasetReaderKITTI import DatasetReaderKITTI
-from FeatureTracker import FeatureTracker
-from utils import drawFrameFeatures, updateTrajectoryDrawing
-
-def savePly(points, colors, output_file):
-    vertexes = [ (p[0], p[1], p[2], c[0], c[1], c[2]) for p, c in zip(points, colors)]
-    vertexes = [ v for v in vertexes if v[2] >= 0 ] # Discard negative z
-    dtypes = [('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
-    array = np.array(vertexes, dtype=dtypes)
-    element = plyfile.PlyElement.describe(array, "vertex")
-    plyfile.PlyData([element]).write(output_file)
-
+from kitti_reader import DatasetReaderKITTI
+from feature_tracking import FeatureTracker
+from utils import drawFrameFeatures, updateTrajectoryDrawing, savePly
 
 if __name__ == "__main__":
     tracker = FeatureTracker()

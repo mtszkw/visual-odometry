@@ -36,7 +36,6 @@ class DatasetReaderKITTI:
             K[1, 1] = focal
             K[1, 2] = cy
             K[2, 2] = 1
-            # print("Constructed camera matrix {}:\n{}".format(K.shape, K))
             return K
 
     def readGroundtuthPosition(self, frameId):

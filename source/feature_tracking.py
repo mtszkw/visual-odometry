@@ -1,12 +1,18 @@
 import cv2
 import numpy as np
 
-class FeatureTracker:        
-    # Finds indices of bad features (with status=0 or position outside the frame).
-    # @param features Detected (or tracked) features.
-    # @param frame Image matrix.
-    # @param status Vector of status flags returned by optical flow.
-    # @returns Vector containing indices that should be filtered out.
+class FeatureTracker:
+    """
+    Finds indices of bad features (with status=0 or position outside the frame).
+    
+    Args:
+        features: Detected (or tracked) features.
+        frame: Image matrix.
+        status: Vector of status flags returned by optical flow.
+    
+    Returns:
+        Vector containing indices that should be filtered out.
+    """        
     def calcWrongFeatureIndices(self, features, frame, status):
         status_ = status.copy()
         for idx, pt in enumerate(features):
@@ -15,12 +21,18 @@ class FeatureTracker:
         wrongIndices = np.where(status_ == 0)[0]
         return wrongIndices
 
-    # Tracks features using Lucas-Kanade optical flow and filters out bad features.
-    # @param prevFrame Previous image.
-    # @param currFrame Current (next) image.
-    # @param prevPts Features detected on previous frame.
-    # @param removeOutliers Set to true if you want to remove bad features after tracking.
-    # @returns Features from previous and current frame (tracked), both filtered.
+    """
+    Tracks features using Lucas-Kanade optical flow and filters out bad features.
+    
+    Args:
+        prevFrame: Previous image.
+        currFrame: Current (next) image.
+        prevPts: Features detected on previous frame.
+        removeOutliers: Set to true if you want to remove bad features after tracking.
+    
+    Returns:
+        Features from previous and current frame (tracked), both filtered.
+    """
     def trackFeatures(self, prevFrame, currFrame, prevPts, removeOutliers=False):
         # Feature tracking on the 2nd frame
         currPts, status, _ = cv2.calcOpticalFlowPyrLK(prevFrame, currFrame, prevPts, None)
