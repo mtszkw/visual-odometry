@@ -8,6 +8,8 @@ In a processing loop I convert images to greyscale, run keypoint detection using
 
 To get better results, I rely on absolute scale provided as KITTI groundtruth when computing abs. pose.
 
+There are plenty things to add: generating point cloud, measuring the accuracy of trajectory and so on.
+
 <p align="center"> <img src="doc/tracking_1.png" alt="Tracking 1"/> </p>
 <p align="center"> <img src="doc/tracking_2.png" alt="Tracking 2"/> </p>
 
